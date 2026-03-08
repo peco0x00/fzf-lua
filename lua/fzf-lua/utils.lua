@@ -885,8 +885,18 @@ function M.get_visual_selection()
   -- local n = cerow-csrow+1
   local n = #lines
   if n <= 0 then return "" end
-  lines[n] = string.sub(assert(lines[n]), 1, cecol)
-  lines[1] = string.sub(assert(lines[1]), cscol)
+  local first_line = lines[1]
+  local last_line = lines[n]
+  if csrow == cerow then
+    local start_char = cscol > 0 and vim.fn.charidx(first_line, cscol - 1) or 0
+    local end_char = cecol > 0 and vim.fn.charidx(last_line, cecol - 1) + 1 or #last_line
+    lines[1] = vim.fn.strcharpart(first_line, start_char, math.max(0, end_char - start_char))
+  else
+    local start_char = cscol > 0 and vim.fn.charidx(first_line, cscol - 1) or 0
+    lines[1] = vim.fn.strcharpart(first_line, start_char)
+    local end_char = cecol > 0 and vim.fn.charidx(last_line, cecol - 1) + 1 or #last_line
+    lines[n] = vim.fn.strcharpart(last_line, 0, end_char)
+  end
   return table.concat(lines, "\n"), {
     start   = { line = csrow, char = cscol },
     ["end"] = { line = cerow, char = cecol },
