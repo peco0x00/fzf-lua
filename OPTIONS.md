@@ -1367,14 +1367,15 @@ Git diff (changed files vs a git ref).
 
 ##### git_diff.ref
 
-Type: `string`, Default: `"HEAD"`
+Type: `string|string[]`, Default: `nil`
 
-Git reference to compare against.
+Git reference(s) to compare against.
 
-##### git_diff.compare_against
+##### git_diff.ref1
 
-Type: `string`, Default: `""`
+Type: `string`, Default: `nil`
 
+`compare_against` was renamed to `ref1`
 Git reference used as the base for the comparison.
 
 #### git_files
