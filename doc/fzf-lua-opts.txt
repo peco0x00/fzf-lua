@@ -1,4 +1,4 @@
-*fzf-lua-opts.txt*        For Neovim >= 0.9.0       Last change: 2026 March 15
+*fzf-lua-opts.txt*        For Neovim >= 0.9.0       Last change: 2026 March 26
 
 ==============================================================================
 Table of Contents                             *fzf-lua-opts-table-of-contents*
@@ -1893,6 +1893,12 @@ Git reference used as the base for the comparison.
 
 
                                                                               
+git_reflog                                           *fzf-lua-opts-git_reflog*
+
+Git reflog.
+
+
+                                                                              
 git_stash                                             *fzf-lua-opts-git_stash*
 
 Git stashes.
@@ -2053,6 +2059,12 @@ File history including current session.
 
 
                                                                               
+jj_files                                               *fzf-lua-opts-jj_files*
+
+Jujutsu tracked files.
+
+
+                                                                              
 jumps                                                     *fzf-lua-opts-jumps*
 
 Jump list.
@@ -2104,6 +2116,13 @@ Type: `boolean|integer`, Default: `120`
 
 Show buffer name in results. Set to a number to only show if the window width
 exceeds this value.
+
+
+lines.show_bufname_len                   *fzf-lua-opts-lines.show_bufname_len*
+
+Type: `integer`, Default: `15`
+
+Show buffer name max length
 
 
 lines.show_unloaded                         *fzf-lua-opts-lines.show_unloaded*

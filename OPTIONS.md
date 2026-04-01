@@ -1403,6 +1403,10 @@ Type: `string`, Default: `nil`
 
 Git reference used as the base for the comparison.
 
+#### git_reflog
+
+Git reflog.
+
 #### git_stash
 
 Git stashes.
@@ -1523,6 +1527,10 @@ Neovim highlight groups.
 
 File history including current session.
 
+#### jj_files
+
+Jujutsu tracked files.
+
 #### jumps
 
 Jump list.
@@ -1564,6 +1572,12 @@ Open buffers lines.
 Type: `boolean|integer`, Default: `120`
 
 Show buffer name in results. Set to a number to only show if the window width exceeds this value.
+
+##### lines.show_bufname_len
+
+Type: `integer`, Default: `15`
+
+Show buffer name max length
 
 ##### lines.show_unloaded
 

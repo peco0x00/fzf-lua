@@ -10,9 +10,10 @@ function M._default_previewer_fn()
   if type(winopts) == "function" then
     winopts = winopts() or {}
     winopts.preview = type(winopts.preview) == "table" and winopts.preview or {}
-    winopts.preview.default = winopts.preview.default or M.defaults.winopts.preview.default
+    winopts.preview.default = winopts.preview.default
+        or utils.map_get(M.defaults, "winopts.preview.default")
   end
-  local previewer = M.globals.default_previewer or winopts.preview.default
+  local previewer = M.globals.default_previewer or utils.map_get(winopts, "preview.default")
   -- the setup function cannot have a custom previewer as deepcopy
   -- fails with stack overflow while trying to copy the custom class
   -- the workaround is to define the previewer as a function instead
@@ -522,9 +523,9 @@ M.defaults.files  = {
   _fzf_nth_devicons      = true,
   git_status_cmd         = {
     "git", "-c", "color.status=false", "--no-optional-locks", "status", "--porcelain=v1" },
-  find_opts              = [[-type f \! -path '*/.git/*']],
-  rg_opts                = [[--color=never --files -g "!.git"]],
-  fd_opts                = [[--color=never --type f --type l --exclude .git]],
+  find_opts              = [[-type f \! -path '*/.git/*' \! -path '*/.jj/*']],
+  rg_opts                = [[--color=never --files -g "!.git" -g "!.jj"]],
+  fd_opts                = [[--color=never --type f --type l --exclude .git --exclude .jj]],
   dir_opts               = [[/s/b/a:-d]],
   hidden                 = true,
   toggle_ignore_flag     = "--no-ignore",
@@ -612,6 +613,7 @@ M.defaults.global = vim.tbl_deep_extend("force", M.defaults.files, {
 ---@field status    fzf-lua.config.GitStatus
 ---@field diff      fzf-lua.config.GitDiff
 ---@field hunks     fzf-lua.config.GitHunks
+---@field reflog    fzf-lua.config.GitReflog
 ---@field commits   fzf-lua.config.GitCommits
 ---@field bcommits  fzf-lua.config.GitBcommits
 ---@field blame     fzf-lua.config.GitBlame
@@ -694,7 +696,8 @@ M.defaults.git                   = {
           FzfLua.git_hunks(o)
         end,
         header = "git hunks",
-        exec_silent = true,
+        reuse = #vim.api.nvim_list_uis() == 0,
+        exec_silent = #vim.api.nvim_list_uis() > 0,
         field_index = "{} $FZF_POS",
       },
       ["ctrl-q"] = {
@@ -731,6 +734,7 @@ M.defaults.git                   = {
       ["--delimiter"] = ":",
       ["--nth"] = "3..",
     },
+    line_field_index  = "{2}",
     _fzf_nth_devicons = true,
     _actions          = function() return M.globals.actions.files end,
     _headers          = { "cwd", "actions" },
@@ -762,7 +766,8 @@ M.defaults.git                   = {
           FzfLua.git_diff(o)
         end,
         header = "git diff",
-        exec_silent = true,
+        reuse = #vim.api.nvim_list_uis() == 0,
+        exec_silent = #vim.api.nvim_list_uis() > 0,
         field_index = "{} $FZF_POS",
       },
     },
@@ -892,6 +897,26 @@ M.defaults.git                   = {
     ["T"] = { icon = "T", color = "magenta" },
     ["?"] = { icon = "?", color = "magenta" },
   },
+}
+
+---Git reflog.
+---@diagnostic disable-next-line: param-type-mismatch
+---@class fzf-lua.config.GitReflog: fzf-lua.config.GitCommits
+M.defaults.git.reflog            = vim.tbl_deep_extend("force", M.defaults.git.commits, {
+  cmd = [[git reflog --color=always --format="%C(yellow)%h %C(blue)%gD%C(auto)%d %gs"]],
+})
+
+---Jujutsu pickers parent table.
+---@class fzf-lua.config.Jj
+---@field files     fzf-lua.config.JjFiles
+M.defaults.jj                    = {
+  ---Jujutsu tracked files.
+  ---@diagnostic disable-next-line: param-type-mismatch
+  ---@class fzf-lua.config.JjFiles: fzf-lua.config.GitFiles
+  files = vim.tbl_deep_extend("force", M.defaults.git.files, {
+    cmd       = "jj file list --ignore-working-copy",
+    git_icons = false,
+  }),
 }
 
 ---Grep using `rg`, `grep` or other grep commands.
@@ -1165,6 +1190,8 @@ M.defaults.tabs                  = {
 ---@class fzf-lua.config.Lines: fzf-lua.config.BufferLines
 ---Show buffer name in results. Set to a number to only show if the window width exceeds this value.
 ---@field show_bufname? boolean|integer
+---Show buffer name max length
+---@field show_bufname_len? integer
 ---Include unloaded (not yet displayed) buffers.
 ---@field show_unloaded? boolean
 ---Include unlisted buffers (`:help unlisted-buffer`).
@@ -1178,6 +1205,7 @@ M.defaults.lines                 = {
   file_icons       = 1, ---@type integer|boolean
   color_icons      = true,
   show_bufname     = 120,
+  show_bufname_len = 15,
   show_unloaded    = true,
   show_unlisted    = false,
   no_term_buffers  = true,
