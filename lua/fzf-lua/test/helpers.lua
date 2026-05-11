@@ -36,7 +36,7 @@ local os_detect = {
   },
   MAC = { name = "MacOS", fn = function() return vim.fn.has("mac") == 1 end },
   LINUX = { name = "Linux", fn = function() return vim.fn.has("linux") == 1 end },
-  STABLE = { name = "Neovim stable", fn = function() return M.NVIM_VERSION() == "0.12.1" end },
+  STABLE = { name = "Neovim stable", fn = function() return M.NVIM_VERSION() == "0.12.2" end },
   NIGHTLY = { name = "Neovim nightly", fn = function() return vim.fn.has("nvim-0.13") == 1 end },
 }
 
@@ -131,7 +131,7 @@ M.new_child_neovim = function()
   local child_lua = child.lua
   child.lua = function(code, arg)
     if type(code) == "string" then return child_lua(code, arg) end
-    return require("fzf-lua.test.exec_lua").run(child, 2, code, arg)
+    return require("fzf-lua.test.exec_lua").run(child_lua, 2, code, arg)
   end
 
   -- TODO: support "function" upvalue

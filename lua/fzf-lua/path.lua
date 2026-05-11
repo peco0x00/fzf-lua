@@ -454,6 +454,12 @@ function M.is_uri(str)
   return str:match("^[%a%-]+://") ~= nil
 end
 
+-- path seps behavior https://github.com/neovim/neovim/pull/37729
+-- luv use `\`, `nvim_buf_get_name` use `/` (on windows, by default)
+local buf_get_name = utils.__IS_WINDOWS and
+    function(buf) return (vim.api.nvim_buf_get_name(buf):gsub([[/]], [[\]])) end
+    or vim.api.nvim_buf_get_name
+
 ---@param entry string
 ---@param opts fzf-lua.Config|{}?
 ---@param force_uri boolean?
@@ -549,7 +555,7 @@ function M.entry_to_file(entry, opts, force_uri)
   if #s > 1 then
     local newfile = file
     for i = 2, #s do
-      newfile = ("%s:%s"):format(newfile, s[i])
+      newfile = ("%s:%s"):format(tostring(newfile), s[i])
       if uv.fs_stat(newfile) then
         file = newfile
         line = s[i + 1]
@@ -566,7 +572,7 @@ function M.entry_to_file(entry, opts, force_uri)
     end
   elseif file and #file > 0 then -- get bufnr from give path
     local buf = vim.fn.bufnr(file)
-    if buf ~= -1 and vim.api.nvim_buf_get_name(buf) == (uv.fs_realpath(file) or file) then
+    if buf ~= -1 and buf_get_name(buf) == (uv.fs_realpath(file) or file) then
       bufnr = buf
       bufname = file
     end
@@ -683,9 +689,14 @@ function M.keymap_to_entry(str)
   mode = valid_modes[mode] and mode or "" -- only valid modes
   local vmap = vim.fn.maparg(keymap, mode, false, true)
   if vmap.callback then
-    local info = debug.getinfo(vmap.callback)
-    if info and info.source then
-      return { path = info.source:gsub("^@", ""), line = info.linedefined }
+    local info = debug.getinfo(vmap.callback, "Sl")
+    if info and info.source and info.linedefined and info.linedefined > 0 then
+      local source = info.source:gsub("^@", "")
+      -- https://github.com/neovim/neovim/blob/64d55b74d83d566975e269bed0810d9008119ddf/src/nvim/lua/executor.c#L671-L680
+      if source:match("vim/") and package.preload[source:gsub("%.lua$", ""):gsub("/", ".")] then
+        source = vim.env.VIMRUNTIME .. "/lua/" .. source .. ".lua"
+      end
+      return { path = source, line = info.linedefined }
     end
   end
   local cmd = ("verb %smap %s"):format(mode, keymap)

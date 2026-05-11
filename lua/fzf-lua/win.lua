@@ -723,7 +723,7 @@ function FzfWin.new(o)
   self.preview_hidden = not not o.winopts.preview.hidden -- force boolean
   self.keymap = o.keymap
   self.previewer = o.previewer
-  self:set_autoclose(vim.F.if_nil(o.autoclose, true))
+  self:set_autoclose(utils.nonnil(o.autoclose, true))
   self.winopts = self:normalize_winopts()
   self.on_closes = {}
   _self = self
@@ -1166,6 +1166,25 @@ local restore_altbuf = function(buf)
   end
 end
 
+local stopinsert = function(ctx)
+  _G.fzf_lua_stopinsert_hack = nil
+  if not (ctx.mode == "nt" and api.nvim_get_mode() ~= "nt") then return end
+  vim.cmd "stopinsert"
+  local pat = "FzfLuaStopInsertHack"
+  _G.fzf_lua_stopinsert_hack = function(cb)
+    api.nvim_create_autocmd("User", { pattern = pat, once = true, callback = cb })
+  end
+  api.nvim_create_autocmd("ModeChanged", {
+    pattern = "*:nt",
+    once = true,
+    callback = function()
+      -- nvim_get_mode don't get correct mode without schedule_wrap
+      vim.schedule_wrap(api.nvim_exec_autocmds)("User", { pattern = pat, modeline = false })
+      _G.fzf_lua_stopinsert_hack = nil
+    end,
+  })
+end
+
 ---@param fzf_bufnr? integer
 ---@param hide? boolean
 function FzfWin:close(fzf_bufnr, hide)
@@ -1179,7 +1198,7 @@ function FzfWin:close(fzf_bufnr, hide)
   -- switching from a term win to another term win preserves terminal mode
   -- even if the target window was in normal terminal mode (#2054 #2419)
   local ctx = utils.__CTX() or {}
-  if ctx.mode == "nt" then vim.cmd "stopinsert" end
+  stopinsert(ctx)
   if self.fzf_winid and api.nvim_win_is_valid(self.fzf_winid) then
     -- restore the original last window
     restore_lastwin(ctx.winid, ctx.last_winid)

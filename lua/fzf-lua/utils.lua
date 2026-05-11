@@ -249,7 +249,7 @@ end
 function M.regex_to_magic(str)
   -- Convert regex to "very magic" pattern, basically a regex
   -- with special meaning for "%=&<>~", `:help /magic`
-  return [[\v]] .. str:gsub("([%%=&<>])", [[\%1]])
+  return [[\v\C]] .. str:gsub("([%%=&<>])", [[\%1]])
       -- searching for @ in very magic needs [@]
       :gsub("([@])", "[%1]")
 end
@@ -1635,8 +1635,10 @@ end
 ---@return boolean
 function M.jump_to_location(location, offset_encoding, reuse_win)
   if M.__HAS_NVIM_011 then
-    return vim.lsp.util.show_document(location, offset_encoding,
-      { reuse_win = reuse_win, focus = true })
+    return M.with({ o = { verbose = 0 } }, function()
+      return vim.lsp.util.show_document(location, offset_encoding,
+        { reuse_win = reuse_win, focus = true })
+    end)
   else
     ---@diagnostic disable-next-line: deprecated
     return vim.lsp.util.jump_to_location(location, offset_encoding, reuse_win)
@@ -1773,5 +1775,15 @@ end
 ---@class fzf-lua.wo: vim.wo,{}
 M.wo = new_win_opt_accessor()
 
+---@diagnostic disable-next-line: deprecated
+M.nonnil = vim.nonnil or vim.F.if_nil
+
+---@diagnostic disable-next-line: deprecated
+M.npcall = vim.npcall or vim.F.npcall
+
+---@diagnostic disable-next-line: deprecated
+M.nil_wrap = not vim.nonnil and vim.F.nil_wrap or function(fn)
+  return function(...) return M.npcall(fn, ...) end
+end
 
 return M

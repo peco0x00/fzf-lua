@@ -1010,6 +1010,8 @@ M.defaults.args = {
 
 ---File history (output of `:oldfiles`).
 ---@class fzf-lua.config.Oldfiles: fzf-lua.config.Base
+---Optional shada file to read, see `:help shada`
+---@field shada_file? string
 ---Only include files that still exist on disk.
 ---@field stat_file? boolean
 ---Include files opened during the current session.
@@ -1727,7 +1729,7 @@ M.defaults.lsp.finder = {
 ---Callback to execute after applying a code action.
 ---@field post_action_cb function
 ---Code action context passed to the LSP server.
----@field context lsp.CodeActionContext
+---@field context vim.lsp.buf.code_action.context
 ---Filter function to exclude certain code actions.
 ---@field filter fun(x: lsp.CodeAction|lsp.Command):boolean
 ---@field _ui_select? { kind: string }

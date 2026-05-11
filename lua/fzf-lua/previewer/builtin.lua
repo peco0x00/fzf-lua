@@ -47,7 +47,7 @@ Previewer.base = Object:extend()
 ---@param opts table
 ---@return fzf-lua.previewer.Builtin
 function Previewer.base:new(o, opts)
-  local default = vim.F.if_nil
+  local default = utils.nonnil
   o = o or {}
   self.type = "builtin"
   self.opts = opts
@@ -198,7 +198,7 @@ function Previewer.base:set_preview_buf(newbuf, min_winopts, no_wipe)
   utils.win_set_buf_noautocmd(self.win.preview_winid, newbuf)
   -- to make gc work, don't reference `win._previewer` in a callback
   local winid = self.win.fzf_winid
-  vim.keymap.set("", "i", function()
+  vim.keymap.set("n", "i", function()
     api.nvim_set_current_win(winid)
     vim.cmd("startinsert")
   end, { buffer = newbuf })
@@ -885,7 +885,7 @@ function Previewer.buffer_or_file:_set_preview_lines(tmpbuf, entry)
   extmarks = entry.extmarks or extmarks
   pcall(api.nvim_buf_set_lines, tmpbuf, 0, -1, false, textlines)
   if extmarks and #extmarks > 0 then
-    local setmark = vim.F.nil_wrap(api.nvim_buf_set_extmark)
+    local setmark = utils.nil_wrap(api.nvim_buf_set_extmark)
     local ns = api.nvim_create_namespace("fzf-lua.preview.hl")
     for _, extmark in ipairs(extmarks) do
       setmark(tmpbuf, ns, extmark.row, extmark.col,
@@ -959,6 +959,11 @@ function Previewer.buffer_or_file:populate_preview_buf(entry_str)
   -- kill previously running jobs
   self:_stop_preview_job()
 
+  if entry._scratch_buf then
+    self:set_preview_buf(entry._scratch_buf)
+    self:preview_buf_post(entry)
+    return
+  end
   -- check if cached is update-to-date to be reuse
   local cached, stale = self.bcache:check(entry)
   entry.cached = cached
@@ -1184,6 +1189,11 @@ function Previewer.buffer_or_file:do_syntax(entry)
     if not ft then return end
     did_filetype_detect = true
   end
+  if ft == "diff" or ft == "git" then
+    api.nvim_buf_call(bufnr, function()
+      api.nvim_exec_autocmds("FileType", { pattern = ft, modeline = false })
+    end)
+  end
 
   -- Use buf local var as setting ft might have unintended consequences
   -- used in `update_render_markdown`, `attach_snacks_image`
@@ -1252,6 +1262,7 @@ function Previewer.buffer_or_file:set_cursor_hl(entry)
     end)()
   end
 
+  local case_sensitive = regex and regex:lower() ~= regex
   -- If called from tags previewer, can happen when using ctags cmd
   -- "ctags -R --c++-kinds=+p --fields=+iaS --extras=+q --excmd=combine"
   -- vim.regex is always magic, see `:help vim.regex`
@@ -1265,7 +1276,7 @@ function Previewer.buffer_or_file:set_cursor_hl(entry)
   if type(cached_pos) ~= "table" then cached_pos = nil end
   local lnum, col = entry.line, math.max(1, entry.col or 1)
 
-  if (not lnum or lnum == 0) and regex then
+  if (not lnum or lnum == 0) and entry.ctag and regex then
     -- pcall(fn.clearmatches, self.win.preview_winid)
     pcall(api.nvim_win_call, win, function()
       -- start searching at line 1 in case we
@@ -1273,7 +1284,7 @@ function Previewer.buffer_or_file:set_cursor_hl(entry)
       api.nvim_win_set_cursor(0, { 1, 0 })
       fn.clearmatches()
       -- test the regex so we can alert the user of the search fail
-      if not utils.vim_regex(regex, self.opts) then return end
+      if not utils.vim_regex(regex, { silent = true }) then return end
       fn.search(regex, "W")
       if hls.search then fn.matchadd(hls.search, regex) end
       self.orig_pos = api.nvim_win_get_cursor(0)
@@ -1307,16 +1318,12 @@ function Previewer.buffer_or_file:set_cursor_hl(entry)
     ---@diagnostic disable-next-line: param-type-mismatch
     local reg = utils.vim_regex(regex, { silent = true })
     if reg then
-      if regex ~= regex:lower() then
+      if case_sensitive then
         regex_start, regex_end = reg:match_line(buf, lnum - 1, col - 1)
       else
         local line = api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1] or ""
         regex_start, regex_end = reg:match_str(line:sub(col):lower())
       end
-    elseif self.opts.silent ~= true then
-      utils.warn(
-        [[Unable to init vim.regex with "%s", %s. . Add 'silent=true' to hide this message.]],
-        regex, reg)
     end
     if regex_start and regex_end then
       extmark = api.nvim_buf_set_extmark(buf, self.ns_previewer, lnum - 1, regex_start + col - 1, {
@@ -1331,7 +1338,7 @@ function Previewer.buffer_or_file:set_cursor_hl(entry)
   if not extmark and hls.cursor and entry.col and entry.col > 0 then
     local end_lnum, end_col = entry.end_line or lnum, entry.end_col or col + 1
     -- stale line/col can cause out-of-range, e.g. marks
-    vim.F.nil_wrap(api.nvim_buf_set_extmark)(buf, self.ns_previewer, lnum - 1, col - 1, {
+    utils.nil_wrap(api.nvim_buf_set_extmark)(buf, self.ns_previewer, lnum - 1, col - 1, {
       end_line = end_lnum - 1,
       end_col = math.max(1, end_col) - 1,
       hl_group = entry.hlgroup or hls.cursor,
@@ -1369,24 +1376,22 @@ function Previewer.buffer_or_file:preview_buf_post(entry, min_winopts)
   -- set cursor highlights for line|col or tag
   self:set_cursor_hl(entry)
 
-  if not utils.is_term_buffer(self.preview_bufnr) then
-    local syntax = function()
-      if self.syntax then
-        self:do_syntax(entry)
-        self:update_render_markdown()
-        self:update_ts_context()
-        self:attach_snacks_image_inline()
-      end
-      -- for attach_snacks_image_{inline,buf}
-      -- https://github.com/folke/snacks.nvim/pull/1615
-      if self.preview_bufnr and vim.b[self.preview_bufnr].snacks_image_attached then
-        utils.wo[self.win.preview_winid][0].winblend = 0
-      end
+  local syntax = function()
+    if self.syntax then
+      self:do_syntax(entry)
+      self:update_render_markdown()
+      self:update_ts_context()
+      self:attach_snacks_image_inline()
     end
-
-    -- syntax highlighting
-    self:debounce("syntax", self.syntax_delay, syntax)
+    -- for attach_snacks_image_{inline,buf}
+    -- https://github.com/folke/snacks.nvim/pull/1615
+    if self.preview_bufnr and vim.b[self.preview_bufnr].snacks_image_attached then
+      utils.wo[self.win.preview_winid][0].winblend = 0
+    end
   end
+
+  -- syntax highlighting
+  self:debounce("syntax", self.syntax_delay, syntax)
 
   self:update_title(entry)
 
@@ -1432,7 +1437,7 @@ function Previewer.help_tags:parse_entry(entry_str)
         end
       end
     end
-    return tag
+    return ([[*%s*]]):format(tag)
   end)()
   return {
     ctag = ctag,
@@ -1565,13 +1570,12 @@ end
 
 ---@diagnostic disable-next-line: unused
 function Previewer.highlights:parse_entry(entry_str)
-  local serpent = require "fzf-lua.lib.serpent"
   local hl = entry_str:match("^[^%s]+")
   local hlgroup = hl
   local lines = {}
   repeat
     local hl_def = api.nvim_get_hl(0, { name = hl, link = true })
-    local block = utils.strsplit(serpent.block(hl_def, { comment = false, sortkeys = false }), "\n")
+    local block = utils.strsplit(vim.inspect(hl_def, { indent = (" "):rep(fn.shiftwidth()) }), "\n")
     block[1] = string.format("%s = %s", hl, block[1])
     vim.tbl_map(function(l) table.insert(lines, l) end, block)
     hl = hl_def.link
